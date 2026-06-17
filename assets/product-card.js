@@ -1,10 +1,9 @@
 import { OverflowList } from '@theme/overflow-list';
 import VariantPicker from '@theme/variant-picker';
-import { ProductComponent } from '@theme/view-event-elements';
+import { Component } from '@theme/component';
 import { debounce, isDesktopBreakpoint, mediaQueryLarge, yieldToMainThread } from '@theme/utilities';
-import { SlideshowSelectEvent } from '@theme/events';
+import { ThemeEvents, VariantSelectedEvent, VariantUpdateEvent, SlideshowSelectEvent } from '@theme/events';
 import { morph } from '@theme/morph';
-import { StandardEvents, ProductSelectEvent } from '@shopify/events';
 
 /**
  * @typedef {object} ProductCardLinkRefs
@@ -16,12 +15,11 @@ import { StandardEvents, ProductSelectEvent } from '@shopify/events';
  * A custom element for product links with images for transitions to PDP.
  * This is a base class that is extended by ProductCard.
  * Used directly by resource-card.liquid for non-product-card scenarios.
- * Extends ProductComponent to automatically emit product:view events when visible.
  *
  * @template {ProductCardLinkRefs} [T=ProductCardLinkRefs]
- * @extends {ProductComponent<T>}
+ * @extends {Component<T>}
  */
-export class ProductCardLink extends ProductComponent {
+export class ProductCardLink extends Component {
   get productTransitionEnabled() {
     return this.getAttribute('data-product-transition') === 'true';
   }
@@ -161,7 +159,8 @@ export class ProductCard extends ProductCardLink {
     if (!(link instanceof HTMLAnchorElement)) throw new Error('Product card link not found');
     this.#handleQuickAdd();
 
-    this.addEventListener(StandardEvents.productSelect, this.#handleProductSelect);
+    this.addEventListener(ThemeEvents.variantUpdate, this.#handleVariantUpdate);
+    this.addEventListener(ThemeEvents.variantSelected, this.#handleVariantSelected);
     this.addEventListener(SlideshowSelectEvent.eventName, this.#handleSlideshowSelect);
     mediaQueryLarge.addEventListener('change', this.#handleQuickAdd);
 
@@ -199,45 +198,43 @@ export class ProductCard extends ProductCardLink {
   };
 
   /**
-   * Handles the product select event (variant selected and updated).
-   * @param {ProductSelectEvent} event - The product select event.
+   * Handles the variant selected event.
+   * @param {VariantSelectedEvent} event - The variant selected event.
    */
-  #handleProductSelect = (event) => {
-    // Update variant picker when variant:selected event fires
-    const { optionValueId } = event.detail ?? {};
-    if (optionValueId && event.target !== this.variantPicker) {
-      this.variantPicker?.updateSelectedOption(optionValueId);
+  #handleVariantSelected = (event) => {
+    if (event.target !== this.variantPicker) {
+      this.variantPicker?.updateSelectedOption(event.detail.resource.id);
+    }
+  };
+
+  /**
+   * Handles the variant update event.
+   * Updates price, checks for unavailable variants, and updates product URL.
+   * @param {VariantUpdateEvent} event - The variant update event.
+   */
+  #handleVariantUpdate = (event) => {
+    // Stop the event from bubbling up to the section, variant updates triggered from product cards are fully handled
+    // by this component and should not affect anything outside the card.
+    event.stopPropagation();
+
+    this.updatePrice(event);
+    this.#isUnavailableVariantSelected(event);
+    this.#updateProductUrl(event);
+    this.refs.quickAdd?.fetchProductPage(this.productPageUrl);
+
+    if (event.target !== this.variantPicker) {
+      this.variantPicker?.updateVariantPicker(event.detail.data.html);
     }
 
-    // Wait for variant:update data via promise
-    event.promise
-      .then(({ detail }) => {
-        if (!detail?.html) return;
+    this.#updateVariantImages();
+    this.#previousSlideIndex = null;
 
-        const { html } = detail;
+    // Remove attribute after re-rendering since a variant selection has been made
+    this.removeAttribute('data-no-swatch-selected');
 
-        // Update price, availability, and URL based on new variant
-        this.updatePrice(html);
-        this.#isUnavailableVariantSelected(html);
-        this.#updateProductUrl(html);
-        this.refs.quickAdd?.fetchProductPage(this.productPageUrl);
-
-        if (event.target !== this.variantPicker) {
-          this.variantPicker?.updateVariantPicker(html);
-        }
-
-        this.#updateVariantImages();
-        this.#previousSlideIndex = null;
-
-        // Remove attribute after re-rendering since a variant selection has been made
-        this.removeAttribute('data-no-swatch-selected');
-
-        // Force overflow list to reflow after variant update
-        this.#updateOverflowList();
-      })
-      .catch((error) => {
-        if (error?.name !== 'AbortError') console.warn('[product-card] Event promise rejected:', error);
-      });
+    // Force overflow list to reflow after variant update
+    // This fixes an issue where the overflow counter doesn't update properly in some browsers
+    this.#updateOverflowList();
   };
 
   /**
@@ -264,11 +261,11 @@ export class ProductCard extends ProductCardLink {
 
   /**
    * Updates the DOM with a new price.
-   * @param {Document} html - The parsed HTML document with updated variant data.
+   * @param {VariantUpdateEvent} event - The variant update event.
    */
-  updatePrice(html) {
+  updatePrice(event) {
     const priceContainer = this.querySelectorAll(`product-price [ref='priceContainer']`)[1];
-    const newPriceElement = html.querySelector(`product-price [ref='priceContainer']`);
+    const newPriceElement = event.detail.data.html.querySelector(`product-price [ref='priceContainer']`);
 
     if (newPriceElement && priceContainer) {
       morph(priceContainer, newPriceElement);
@@ -276,11 +273,11 @@ export class ProductCard extends ProductCardLink {
   }
 
   /**
-   * Updates the product URL based on the variant update.
-   * @param {Document} html - The parsed HTML document with updated variant data.
+   * Updates the product URL based on the variant update event.
+   * @param {VariantUpdateEvent} event - The variant update event.
    */
-  #updateProductUrl(html) {
-    const responseProductCard = html.querySelector('product-card');
+  #updateProductUrl(event) {
+    const responseProductCard = event.detail.data.html?.querySelector('product-card');
     const anchorElement = responseProductCard?.querySelector('a');
     const featuredMediaUrl = responseProductCard?.getAttribute('data-featured-media-url');
 
@@ -308,10 +305,12 @@ export class ProductCard extends ProductCardLink {
 
   /**
    * Checks if an unavailable variant is selected.
-   * @param {Document} html - The parsed HTML document with updated variant data.
+   * @param {VariantUpdateEvent} event - The variant update event.
    */
-  #isUnavailableVariantSelected(html) {
-    const allVariants = /** @type {NodeListOf<HTMLInputElement>} */ (html.querySelectorAll('input:checked'));
+  #isUnavailableVariantSelected(event) {
+    const allVariants = /** @type {NodeListOf<HTMLInputElement>} */ (
+      event.detail.data.html.querySelectorAll('input:checked')
+    );
 
     for (const variant of allVariants) {
       this.#toggleAddToCartButton(variant.dataset.optionAvailable === 'true');
@@ -542,27 +541,19 @@ class SwatchesVariantPickerComponent extends VariantPicker {
     this.parentProductCard = this.closest('product-card');
 
     // Listen for variant updates to apply pending URL changes
-    this.addEventListener(StandardEvents.productSelect, this.#handleCardProductSelect.bind(this));
+    this.addEventListener(ThemeEvents.variantUpdate, this.#handleCardVariantUrlUpdate.bind(this));
   }
 
   /**
    * Updates the card URL when a variant is selected.
-   * @param {ProductSelectEvent} event
    */
-  #handleCardProductSelect(event) {
-    // Handle URL update via promise resolution
-    event.promise
-      .then(() => {
-        if (this.pendingVariantId && this.parentProductCard instanceof ProductCard) {
-          const currentUrl = new URL(this.parentProductCard.refs.productCardLink.href);
-          currentUrl.searchParams.set('variant', this.pendingVariantId);
-          this.parentProductCard.refs.productCardLink.href = currentUrl.toString();
-          this.pendingVariantId = null;
-        }
-      })
-      .catch((error) => {
-        if (error?.name !== 'AbortError') console.warn('[product-card] Event promise rejected:', error);
-      });
+  #handleCardVariantUrlUpdate() {
+    if (this.pendingVariantId && this.parentProductCard instanceof ProductCard) {
+      const currentUrl = new URL(this.parentProductCard.refs.productCardLink.href);
+      currentUrl.searchParams.set('variant', this.pendingVariantId);
+      this.parentProductCard.refs.productCardLink.href = currentUrl.toString();
+      this.pendingVariantId = null;
+    }
   }
 
   /**

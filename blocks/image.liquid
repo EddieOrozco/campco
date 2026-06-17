@@ -1,3 +1,5 @@
+
+
 {% liquid
   assign block_settings = block.settings
   assign ratio = 1
@@ -272,13 +274,6 @@
       "unit": "%",
       "label": "t:settings.opacity",
       "default": 100,
-      "visible_if": "{{ block.settings.border != 'none' }}"
-    },
-    {
-      "type": "color",
-      "id": "border_color",
-      "label": "t:settings.color",
-      "placeholder": "t:settings.default",
       "visible_if": "{{ block.settings.border != 'none' }}"
     },
     {

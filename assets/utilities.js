@@ -1,11 +1,9 @@
 /**
- * Schedules a callback during idle periods, or falls back to setTimeout.
- * @type {(callback: IdleRequestCallback, options?: IdleRequestOptions) => number}
+ * Request an idle callback or fallback to setTimeout
+ * @returns {function} The requestIdleCallback function
  */
 export const requestIdleCallback =
-  typeof window.requestIdleCallback === 'function'
-    ? (cb, opts) => window.requestIdleCallback(cb, opts)
-    : (cb) => window.setTimeout(cb, 0);
+  typeof window.requestIdleCallback == 'function' ? window.requestIdleCallback : setTimeout;
 
 /**
  * Returns a promise that resolves after yielding to the main thread.
@@ -94,7 +92,8 @@ const viewTransitionTypes = {
 export function startViewTransition(callback, types) {
   // Check if the API is supported and transitions are desired
   if (!supportsViewTransitions() || isLowPowerDevice() || prefersReducedMotion()) {
-    return Promise.resolve(callback());
+    callback();
+    return Promise.resolve();
   }
 
   // eslint-disable-next-line no-async-promise-executor
@@ -260,11 +259,10 @@ export function onDocumentLoaded(callback) {
  * Check if the DOM is ready and call the callback when it is.
  * This fires when the DOM is fully parsed but before all resources are loaded.
  * @param {() => void} callback The function to call when the DOM is ready.
- * @param {AddEventListenerOptions} [options] The options to pass to `document.addEventListener`.
  */
-export function onDocumentReady(callback, options) {
+export function onDocumentReady(callback) {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', callback, options);
+    document.addEventListener('DOMContentLoaded', callback);
   } else {
     callback();
   }

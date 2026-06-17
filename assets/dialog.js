@@ -1,6 +1,5 @@
 import { Component } from '@theme/component';
 import { debounce, isClickedOutside, onAnimationEnd } from '@theme/utilities';
-import { getScrollTop, scrollTo } from '@theme/scroll-container';
 
 /**
  * A custom element that manages a dialog.
@@ -49,11 +48,14 @@ export class DialogComponent extends Component {
 
     if (dialog.open) return;
 
-    this.#previousScrollY = getScrollTop();
+    const scrollY = window.scrollY;
+    this.#previousScrollY = scrollY;
 
     // Prevent layout thrashing by separating DOM reads from DOM writes
     requestAnimationFrame(() => {
-      document.documentElement.setAttribute('scroll-lock', '');
+      document.body.style.width = '100%';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
 
       dialog.showModal();
       this.dispatchEvent(new DialogOpenEvent());
@@ -89,8 +91,10 @@ export class DialogComponent extends Component {
       subtree: false,
     });
 
-    document.documentElement.removeAttribute('scroll-lock');
-    scrollTo({ top: this.#previousScrollY, behavior: 'instant' });
+    document.body.style.width = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    window.scrollTo({ top: this.#previousScrollY, behavior: 'instant' });
 
     dialog.close();
     dialog.classList.remove('dialog-closing');

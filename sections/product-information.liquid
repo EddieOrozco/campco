@@ -1,3 +1,5 @@
+
+
 <script type="application/ld+json">
   {{ closest.product | structured_data }}
 </script>
@@ -38,7 +40,7 @@
     data-default-variant-title="{{ 'products.product.default_title' | t }}"
   >
     <div
-      class="sticky-add-to-cart__bar color-custom-popover"
+      class="sticky-add-to-cart__bar color-{{ settings.popover_color_scheme }}"
       data-stuck="false"
       ref="stickyBar"
       role="region"
@@ -127,7 +129,7 @@
           class="add-to-cart-text"
         >
           {% if current_variant.available %}
-            <span class="svg-wrapper">
+            <span class="svg-wrapper add-to-cart-icon">
               {{- 'icon-add-to-cart.svg' | inline_asset_content -}}
             </span>
           {% endif %}
@@ -166,7 +168,7 @@
 {% endif %}
 
 {% render 'product-information-content',
-  product: closest.product,
+  product_media_size: closest.product.media.size,
   section_id: section.id,
   settings: section.settings,
   media_gallery: media_gallery,
@@ -437,10 +439,10 @@
       "default": true
     },
     {
-      "type": "color",
-      "id": "background_color",
-      "label": "t:settings.background_color",
-      "placeholder": "t:settings.default"
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "t:settings.color_scheme",
+      "default": "scheme-1"
     },
     {
       "type": "header",

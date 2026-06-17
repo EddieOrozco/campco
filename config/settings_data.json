@@ -80,10 +80,10 @@
     "palette_variant_border": "{{ settings.color_palette.color3 }}",
     "color_palette": {
       "background": "#F5F2EC",
-        "foreground": "#1C2B1E",
-        "color1": "#2D4A32",
-        "color2": "#E8F0E4",
-        "color3": "#C4B99A"
+      "foreground": "#1C2B1E",
+      "color1": "#2D4A32",
+      "color2": "#E8F0E4",
+      "color3": "#C4B99A"
     }
   },
   "presets": {
